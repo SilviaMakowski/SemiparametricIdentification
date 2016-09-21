@@ -1,60 +1,39 @@
-function[] =train(all_data,dataSubset ,iterations_number,iter_no, sample_no, resolution, model_name, alpha)
- 
-
-    explore_alpha=false;
-    if nargin < 8
+function[individual_model_seed, duration_scale_seed, amplitude_scale_seed] =train(types, train_seed, initial_train_seed, train_data,dataSubset ,iterations_number,iter_no, sample_no, amp_res,dur_res, model_name, desc, alpha)
+	explore_alpha=false;
+    if nargin < 13
         explore_alpha=true;
     end
-    
     alpha_values=[1,10,100];
-    types=[1:1:5];
-    max_ampl=100;
     
-    %amplitude, duration, rang and type column index in the data
-    duration_cindex=2;
-    amplitude_cindex=3;
-	lowrang_cindex=4;
-	highrang_cindex=5;
-    type_cindex=1;
-    data_index=[amplitude_cindex,duration_cindex,lowrang_cindex,highrang_cindex,type_cindex];
-    all_data.desc=data_index;
-
-    for seed=1:iterations_number
+ 
+	for seed=1:iterations_number		
+        all_data=train_data{seed};
+		%calculating parameters needed for train
         
-        %splitting the data randomly with specific seed
-        [train_ids,test_ids]=split_data(all_data.senId,dataSubset,seed);
-        
-        %calculating parameters needed for train
         if (explore_alpha)
-            alpha=estimate_alpha(all_data,train_ids,alpha_values,seed);
+            alpha=estimate_alpha(all_data,ones(1,length(all_data.senId)),alpha_values,seed,types,desc);
             disp(['Iteration:', num2str(seed),' Choosen alpha= ',num2str(alpha)]);
         end
-        sampled_train=downsample(all_data.X(find(train_ids),:),15);
-        [amplitude_scale,duration_scale]=estimate_sigma(sampled_train(:,all_data.desc(1)),sampled_train(:,all_data.desc(2)));
-        amp_res=(0:(log(max_ampl+2)/(resolution)):log(max_ampl+2))';
-        dur_res=(0:(1000/(resolution)):1000)';
-    
+        sampled_train=downsample(all_data.X,15);
+        [amplitude_scale,duration_scale]=estimate_sigma(sampled_train(:,desc(1)),sampled_train(:,desc(2)));
         
-        %parsing data to get the training and testing data according to the previous split
-        %also extracting the initial data point for each sentence of the training and testing
-        %besides counting the number data points for each individual for each type
-        [train,initial_train, test, initial_test, individuals_types_count]=parse_data(all_data, train_ids,test_ids, types);
-                
-        %training a model for the given training data with specific parametes
-        individual_model=train_model(train,initial_train,amplitude_scale,duration_scale,alpha,amp_res,dur_res, iter_no,sample_no, data_index, types, seed);
+		
+		%training a model for the given training data with specific parametes
+		
+        individual_model=train_model(train_seed{seed},initial_train_seed{seed},amplitude_scale,duration_scale,alpha,amp_res,dur_res, iter_no,sample_no, desc, types, seed);
         
+		
+		
+		
         %saving the results of this split/seed
-        individual_model_seed{seed}=individual_model;
-        test_seed{seed}=test;
-        duration_scale_seed{seed}=duration_scale;
+		
+		individual_model_seed{seed}=individual_model;
+		duration_scale_seed{seed}=duration_scale;
         amplitude_scale_seed{seed}=amplitude_scale;
-        individuals_types_count_seed{seed}=individuals_types_count;
-        initial_test_seed{seed}=initial_test;
-        initial_train_seed{seed}=initial_train;
-    end
-    
-    %saving the processing result and trained models
-    save(model_name,'individual_model_seed','test_seed','amp_res', 'dur_res','iterations_number','individuals_types_count_seed','types','initial_test_seed','data_index');
+		
+	end
+	%saving the processing result and trained models
+    %save(model_name,'individuals_types_count_seed','types','initial_test_seed','data_index');
 end
 
 %%estimate the amplitude and duration kernel sigma values
@@ -71,14 +50,22 @@ function[amplitude_scale,duration_scale] =estimate_sigma(amplitude_list,duration
    duration_scale=2*duration_scale/(length(amplitude_list))^2;
 end
 
+
 %%estimate the amplitude/duration kernel alpha value
-function[alpha]=estimate_alpha(all_data,train_ids,alpha_values,seed)
+function[alpha]=estimate_alpha(all_data,train_ids,alpha_values,seed,types,desc)
     selected_ids=split_data(all_data.senId,train_ids,seed);
+    area_resolution=500;%number of points to calculate area
+    max_ampl=100;
+    amp_res=(0:(log(max_ampl+2)/(area_resolution)):log(max_ampl+2))';
+    dur_res=(0:(1000/(area_resolution)):1000)';
     acc_values=[];
+	seed_no=5;
+	model_name='temp_result';
+    result_file='users_likelihoods';%name of the likelihoods files containing the probability of each dataset to be one of the users
     for alpha_value=alpha_values
-        train(all_data,selected_ids,5,1000, 500, 500,'temp_result',alpha_value);
-        acc_values=[acc_values;identify('temp_result', 1)];
-        delete('temp_result');
+        [train_data_seed, test_data_seed,train_seed, test_seed, initial_train_seed,initial_test_seed,individuals_types_count_seed]=process_data(all_data,selected_ids,seed_no, types, desc);
+        [individual_model_seed, duration_scale_seed, amplitude_scale_seed]=train(types, train_seed, initial_train_seed, train_data_seed,selected_ids,seed_no,1000, 500, amp_res, dur_res,model_name,desc,alpha_value);
+        acc_values=[acc_values;identify(1,result_file, amp_res,dur_res,types,test_seed,initial_test_seed, individual_model_seed, individuals_types_count_seed)];
     end
     [v,i]=max(acc_values);
     alpha=alpha_values(i);

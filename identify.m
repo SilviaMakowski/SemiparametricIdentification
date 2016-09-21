@@ -1,5 +1,5 @@
 %calculates likelihood of each user being any other user using a percentage of the test data and saving the result into users_likelihood_file 
-function[acc] =identify(training_model, percentage, users_likelihood_file)
+function[acc] =identify(percentage, users_likelihood_file, amp_res,dur_res,types,test_seed,initial_test_seed, individual_model_seed, individuals_types_count_seed)
 
  duration_cindex=2;
     amplitude_cindex=3;
@@ -8,17 +8,17 @@ function[acc] =identify(training_model, percentage, users_likelihood_file)
     type_cindex=1;
     data_index=[amplitude_cindex,duration_cindex,lowrang_cindex,highrang_cindex,type_cindex];
 
-    load(training_model);
+    %load(training_model);
     save_result=true;
     if nargin < 3
         save_result=false;
     end
-    amp_res=amp_res;
-    dur_res=dur_res;
-    types=types;
+    %amp_res=amp_res;
+    %dur_res=dur_res;
+    %types=types;
     likelihood_values={};
     acc_list=[];
-    
+    iterations_number=length(individual_model_seed);
     for seed=1:iterations_number %for each training iteration
         iteration_error=0;
         individual_model=individual_model_seed{seed};
